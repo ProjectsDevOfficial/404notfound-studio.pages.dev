@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Регистрация - 404 | NotFound Studio</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="login-page">
+        <div class="login-container">
+            <div class="login-form">
+                <div class="login-header">
+                    <h1>Регистрация</h1>
+                    <p>404 | NotFound Studio</p>
+                </div>
+                <form id="registerForm">
+                    <div class="form-group">
+                        <label for="name">Имя:</label>
+                        <input type="text" id="name" name="name" required placeholder="Ваше имя">
+                    </div>
+                    <div class="form-group">
+                        <label for="email">Email:</label>
+                        <input type="email" id="email" name="email" required placeholder="your@email.com">
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Пароль:</label>
+                        <div class="password-input">
+                            <input type="password" id="password" name="password" required placeholder="Минимум 6 символов">
+                            <div class="password-toggle" onclick="togglePassword()">
+                                <i class="fas fa-eye" id="passwordIcon"></i>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="confirmPassword">Подтвердите пароль:</label>
+                        <div class="password-input">
+                            <input type="password" id="confirmPassword" name="confirmPassword" required placeholder="Повторите пароль">
+                            <div class="password-toggle" onclick="toggleConfirmPassword()">
+                                <i class="fas fa-eye" id="confirmPasswordIcon"></i>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="avatar">Аватар (emoji):</label>
+                        <input type="text" id="avatar" name="avatar" placeholder="👤" maxlength="2">
+                    </div>
+                    <button type="submit" id="registerBtn" class="btn btn-primary">Зарегистрироваться</button>
+                </form>
+                <div id="registerError" class="error-message"></div>
+                <div id="registerSuccess" class="success-message"></div>
+                <div class="form-links">
+                    <a href="index.html">← На главную</a>
+                    <a href="login.html">Уже есть аккаунт? Войти</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="database-sqlite.js"></script>
+    <script src="clear-database.js"></script>
+    <script src="register.js"></script>
+</body>
+</html>
