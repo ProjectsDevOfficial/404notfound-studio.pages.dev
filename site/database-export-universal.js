@@ -1,6 +1,6 @@
-// Экспорт/импорт для файловой базы данных
+// Экспорт/импорт для универсальной базы данных
 
-class FileDatabaseExporter {
+class UniversalDatabaseExporter {
     constructor() {
         this.db = window.db;
         if (!this.db) {
@@ -11,15 +11,28 @@ class FileDatabaseExporter {
     // Экспорт базы данных в файл database.db
     async exportToFile() {
         try {
-            const success = this.db.exportDatabaseFile();
+            const data = this.db.exportData();
             
-            if (success) {
-                this.showNotification('База данных экспортирована в файл database.db', 'success');
-            } else {
-                this.showNotification('Ошибка экспорта базы данных', 'error');
+            if (!data) {
+                this.showNotification('Нет данных для экспорта', 'error');
+                return false;
             }
             
-            return success;
+            // Создаем Blob с данными
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            
+            // Создаем ссылку для скачивания
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'database.db';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            this.showNotification('База данных экспортирована в файл database.db', 'success');
+            return true;
         } catch (error) {
             console.error('Ошибка экспорта базы данных:', error);
             this.showNotification('Ошибка экспорта: ' + error.message, 'error');
@@ -34,7 +47,10 @@ class FileDatabaseExporter {
                 return false;
             }
             
-            const result = await this.db.importFromFile(file);
+            const text = await file.text();
+            const data = JSON.parse(text);
+            
+            const result = await this.db.importData(data);
             
             if (result.success) {
                 this.showNotification('База данных успешно импортирована! Перезагрузка...', 'success');
@@ -59,14 +75,30 @@ class FileDatabaseExporter {
         notification.className = `notification ${type}`;
         notification.textContent = message;
         
+        // Стили для уведомления
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: ${type === 'success' ? '#4caf50' : type === 'error' ? '#f44336' : '#2196f3'};
+            color: white;
+            padding: 1rem 2rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            z-index: 10000;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        `;
+        
         document.body.appendChild(notification);
         
         setTimeout(() => {
-            notification.classList.add('show');
+            notification.style.opacity = '1';
         }, 100);
         
         setTimeout(() => {
-            notification.classList.remove('show');
+            notification.style.opacity = '0';
             setTimeout(() => {
                 if (document.body.contains(notification)) {
                     document.body.removeChild(notification);
@@ -89,13 +121,13 @@ class FileDatabaseExporter {
                     <label for="importFile" class="btn btn-secondary">
                         <i class="fas fa-upload"></i> Импортировать database.db
                     </label>
-                    <input type="file" id="importFile" accept=".db,.json,.sql" style="display: none;">
+                    <input type="file" id="importFile" accept=".db,.json" style="display: none;">
                 </div>
             </div>
             <div class="database-info">
-                <p><strong>Реальная база данных SQLite</strong></p>
-                <p>Данные сохраняются в файл database.db</p>
-                <p>Файл содержит настоящие SQL таблицы</p>
+                <p><strong>Универсальная база данных</strong></p>
+                <p>Работает на всех устройствах и браузерах</p>
+                <p>Данные синхронизируются автоматически</p>
                 <p><strong>Внимание:</strong> Импорт заменит все текущие данные!</p>
             </div>
             <div class="database-stats">
@@ -104,7 +136,7 @@ class FileDatabaseExporter {
             </div>
         `;
 
-        // Добавляем стили
+        // Стили для панели
         container.style.cssText = `
             position: fixed;
             top: 20px;
@@ -192,7 +224,7 @@ function addDatabaseExportButton() {
         button.className = 'btn btn-secondary';
         button.innerHTML = '<i class="fas fa-database"></i> Управление БД';
         button.onclick = () => {
-            const exporter = new FileDatabaseExporter();
+            const exporter = new UniversalDatabaseExporter();
             exporter.createExportInterface();
         };
         
@@ -213,11 +245,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Глобальные функции
 window.exportDatabase = async function() {
-    const exporter = new FileDatabaseExporter();
+    const exporter = new UniversalDatabaseExporter();
     await exporter.exportToFile();
 };
 
 window.importDatabase = async function(file) {
-    const exporter = new FileDatabaseExporter();
+    const exporter = new UniversalDatabaseExporter();
     await exporter.importFromFile(file);
 };
