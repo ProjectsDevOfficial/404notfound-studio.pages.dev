@@ -1,6 +1,6 @@
-// Экспорт/импорт для универсальной базы данных
+// Экспорт/импорт для файловой базы данных data.db
 
-class UniversalDatabaseExporter {
+class FileDatabaseExporter {
     constructor() {
         this.db = window.db;
         if (!this.db) {
@@ -8,7 +8,7 @@ class UniversalDatabaseExporter {
         }
     }
 
-    // Экспорт базы данных в файл database.db
+    // Экспорт базы данных в файл data.db
     async exportToFile() {
         try {
             const data = this.db.exportData();
@@ -25,13 +25,13 @@ class UniversalDatabaseExporter {
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = 'database.db';
+            a.download = 'data.db';
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
             
-            this.showNotification('База данных экспортирована в файл database.db', 'success');
+            this.showNotification('База данных экспортирована в файл data.db', 'success');
             return true;
         } catch (error) {
             console.error('Ошибка экспорта базы данных:', error);
@@ -115,19 +115,19 @@ class UniversalDatabaseExporter {
             <h3>Управление базой данных</h3>
             <div class="export-controls">
                 <button id="exportBtn" class="btn btn-primary">
-                    <i class="fas fa-download"></i> Экспортировать database.db
+                    <i class="fas fa-download"></i> Экспортировать data.db
                 </button>
                 <div class="import-control">
                     <label for="importFile" class="btn btn-secondary">
-                        <i class="fas fa-upload"></i> Импортировать database.db
+                        <i class="fas fa-upload"></i> Импортировать data.db
                     </label>
                     <input type="file" id="importFile" accept=".db,.json" style="display: none;">
                 </div>
             </div>
             <div class="database-info">
-                <p><strong>Универсальная база данных</strong></p>
-                <p>Работает на всех устройствах и браузерах</p>
-                <p>Данные синхронизируются автоматически</p>
+                <p><strong>Файловая база данных</strong></p>
+                <p>Данные хранятся в файле data.db</p>
+                <p>Работает без localStorage</p>
                 <p><strong>Внимание:</strong> Импорт заменит все текущие данные!</p>
             </div>
             <div class="database-stats">
@@ -224,7 +224,7 @@ function addDatabaseExportButton() {
         button.className = 'btn btn-secondary';
         button.innerHTML = '<i class="fas fa-database"></i> Управление БД';
         button.onclick = () => {
-            const exporter = new UniversalDatabaseExporter();
+            const exporter = new FileDatabaseExporter();
             exporter.createExportInterface();
         };
         
@@ -245,11 +245,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Глобальные функции
 window.exportDatabase = async function() {
-    const exporter = new UniversalDatabaseExporter();
+    const exporter = new FileDatabaseExporter();
     await exporter.exportToFile();
 };
 
 window.importDatabase = async function(file) {
-    const exporter = new UniversalDatabaseExporter();
+    const exporter = new FileDatabaseExporter();
     await exporter.importFromFile(file);
 };

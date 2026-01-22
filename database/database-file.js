@@ -1,37 +1,29 @@
-// Универсальная база данных - работает везде без localStorage
-// Использует GitHub Gist или JSON файл для хранения данных
+// База данных с файлом data.db - работает без localStorage
 
-class UniversalDatabase {
+class FileDatabase {
     constructor() {
-        this.apiEndpoint = 'https://api.github.com/gists';
-        this.gistId = null; // Будет установлен при инициализации
-        this.token = null; // GitHub token для записи (опционально)
-        this.cache = {};
+        this.fileName = 'data.db';
+        this.data = null;
         this.initDatabase();
     }
 
     async initDatabase() {
         try {
-            // Проверяем, есть ли сохраненный Gist ID
-            this.gistId = this.getStorageItem('db_gist_id');
+            // Пробуем загрузить из файла data.db
+            await this.loadFromFile();
             
-            if (!this.gistId) {
-                // Создаем новый Gist с начальными данными
-                await this.createNewGist();
-            } else {
-                // Загружаем существующие данные
-                await this.loadFromGist();
+            if (!this.data) {
+                // Если файла нет, создаем начальные данные
+                this.createInitialData();
             }
         } catch (error) {
             console.error('Database initialization error:', error);
-            // Если Gist не работает, используем localStorage как fallback
-            this.initLocalStorage();
+            this.createInitialData();
         }
     }
 
-    // Создание нового Gist
-    async createNewGist() {
-        const initialData = {
+    createInitialData() {
+        this.data = {
             users: [],
             projects: [
                 {
@@ -73,113 +65,106 @@ class UniversalDatabase {
                 discordInvite: 'https://discord.gg/BKF9wacWU9'
             }
         };
-
-        this.cache = initialData;
         
-        // Сохраняем в localStorage как backup
-        this.setStorageItem('database_backup', JSON.stringify(initialData));
-        
-        console.log('Universal database initialized with default data');
+        // Автоматически сохраняем начальные данные
+        this.saveToFile();
+        console.log('Created initial database data');
     }
 
-    // Загрузка из Gist
-    async loadFromGist() {
+    async loadFromFile() {
         try {
-            const response = await fetch(`${this.apiEndpoint}/${this.gistId}`);
+            // Пробуем найти файл data.db в текущей директории
+            const response = await fetch('./data.db');
             if (response.ok) {
-                const gist = await response.json();
-                const dataFile = gist.files['database.json'];
-                if (dataFile && dataFile.content) {
-                    this.cache = JSON.parse(dataFile.content);
-                    console.log('Database loaded from Gist');
-                    return;
-                }
+                const text = await response.text();
+                this.data = JSON.parse(text);
+                console.log('Database loaded from file');
+                return true;
             }
         } catch (error) {
-            console.error('Error loading from Gist:', error);
+            console.log('File data.db not found, will create new one');
         }
-        
-        // Если не удалось загрузить из Gist, пробуем localStorage
-        this.initLocalStorage();
+        return false;
     }
 
-    // Инициализация localStorage как fallback
-    initLocalStorage() {
-        const backup = this.getStorageItem('database_backup');
-        if (backup) {
-            try {
-                this.cache = JSON.parse(backup);
-                console.log('Database loaded from localStorage backup');
-            } catch (error) {
-                console.error('Error parsing backup:', error);
-                this.cache = { users: [], projects: [], messages: [], settings: {} };
-            }
-        } else {
-            this.cache = { users: [], projects: [], messages: [], settings: {} };
-        }
-    }
-
-    // Сохранение данных
-    async saveData() {
+    async saveToFile() {
         try {
-            // Сохраняем в localStorage как backup
-            this.setStorageItem('database_backup', JSON.stringify(this.cache));
+            // Создаем Blob с данными
+            const blob = new Blob([JSON.stringify(this.data, null, 2)], { type: 'application/json' });
             
-            // Пробуем сохранить в Gist (если есть token)
-            if (this.token && this.gistId) {
-                await this.saveToGist();
+            // Сохраняем в глобальную переменную для скачивания
+            window.databaseBlob = blob;
+            
+            // Также пробуем сохранить через IndexedDB для персистентности
+            if ('indexedDB' in window) {
+                await this.saveToIndexedDB();
             }
             
+            console.log('Database saved to file');
             return true;
         } catch (error) {
-            console.error('Error saving data:', error);
+            console.error('Error saving to file:', error);
             return false;
         }
     }
 
-    // Сохранение в Gist
-    async saveToGist() {
+    async saveToIndexedDB() {
+        return new Promise((resolve, reject) => {
+            const request = indexedDB.open('NotFoundDB', 1);
+            
+            request.onerror = () => reject(request.error);
+            request.onsuccess = () => {
+                const db = request.result;
+                const transaction = db.transaction(['data'], 'readwrite');
+                const store = transaction.objectStore('data');
+                
+                const putRequest = store.put(this.data, 'main');
+                putRequest.onsuccess = () => resolve();
+                putRequest.onerror = () => reject(putRequest.error);
+            };
+            
+            request.onupgradeneeded = (event) => {
+                const db = event.target.result;
+                if (!db.objectStoreNames.contains('data')) {
+                    db.createObjectStore('data');
+                }
+            };
+        });
+    }
+
+    async loadFromIndexedDB() {
         try {
-            const response = await fetch(`${this.apiEndpoint}/${this.gistId}`, {
-                method: 'PATCH',
-                headers: {
-                    'Authorization': `token ${this.token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    files: {
-                        'database.json': {
-                            content: JSON.stringify(this.cache, null, 2)
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open('NotFoundDB', 1);
+                
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => {
+                    const db = request.result;
+                    const transaction = db.transaction(['data'], 'readonly');
+                    const store = transaction.objectStore('data');
+                    
+                    const getRequest = store.get('main');
+                    getRequest.onsuccess = () => {
+                        if (getRequest.result) {
+                            this.data = getRequest.result;
+                            resolve(true);
+                        } else {
+                            resolve(false);
                         }
+                    };
+                    getRequest.onerror = () => reject(getRequest.error);
+                };
+                
+                request.onupgradeneeded = (event) => {
+                    const db = event.target.result;
+                    if (!db.objectStoreNames.contains('data')) {
+                        db.createObjectStore('data');
                     }
-                })
+                };
             });
-            
-            if (!response.ok) {
-                throw new Error('Failed to save to Gist');
-            }
-            
-            console.log('Data saved to Gist');
         } catch (error) {
-            console.error('Error saving to Gist:', error);
-            throw error;
-        }
-    }
-
-    // Вспомогательные функции для localStorage
-    getStorageItem(key) {
-        try {
-            return localStorage.getItem(key);
-        } catch (error) {
-            return null;
-        }
-    }
-
-    setStorageItem(key, value) {
-        try {
-            localStorage.setItem(key, value);
-        } catch (error) {
-            console.error('localStorage error:', error);
+            console.error('Error loading from IndexedDB:', error);
+            return false;
         }
     }
 
@@ -187,7 +172,7 @@ class UniversalDatabase {
     async registerUser(userData) {
         try {
             // Проверка существования email
-            if (this.cache.users.find(user => user.email === userData.email)) {
+            if (this.data.users.find(user => user.email === userData.email)) {
                 return { success: false, error: 'Пользователь с таким email уже существует' };
             }
 
@@ -196,21 +181,21 @@ class UniversalDatabase {
                 email: userData.email,
                 password: this.hashPassword(userData.password),
                 name: userData.name || userData.email.split('@')[0],
-                role: this.cache.users.length === 0 ? 'admin' : 'user',
+                role: this.data.users.length === 0 ? 'admin' : 'user',
                 avatar: userData.avatar || '👤',
                 createdAt: new Date().toISOString(),
                 lastLogin: null,
                 isActive: true
             };
 
-            this.cache.users.push(newUser);
+            this.data.users.push(newUser);
             
             // Обновляем настройку первого пользователя
-            if (this.cache.users.length === 1) {
-                this.cache.settings.firstUserRegistered = true;
+            if (this.data.users.length === 1) {
+                this.data.settings.firstUserRegistered = true;
             }
 
-            await this.saveData();
+            await this.saveToFile();
             return { success: true, user: { ...newUser, password: undefined } };
         } catch (error) {
             console.error('Ошибка регистрации:', error);
@@ -221,7 +206,7 @@ class UniversalDatabase {
     // Авторизация пользователя
     async loginUser(email, password) {
         try {
-            const user = this.cache.users.find(u => u.email === email && u.isActive);
+            const user = this.data.users.find(u => u.email === email && u.isActive);
             if (!user) {
                 return { success: false, error: 'Пользователь не найден' };
             }
@@ -232,7 +217,7 @@ class UniversalDatabase {
 
             // Обновляем время последнего входа
             user.lastLogin = new Date().toISOString();
-            await this.saveData();
+            await this.saveToFile();
 
             return { 
                 success: true, 
@@ -251,50 +236,10 @@ class UniversalDatabase {
         }
     }
 
-    // Получение проектов
-    async getProjects() {
-        try {
-            return this.cache.projects || [];
-        } catch (error) {
-            console.error('Ошибка получения проектов:', error);
-            return [];
-        }
-    }
-
-    // Добавление проекта
-    async addProject(projectData) {
-        try {
-            const newProject = {
-                id: Date.now(),
-                ...projectData,
-                createdAt: new Date().toISOString()
-            };
-
-            this.cache.projects.push(newProject);
-            await this.saveData();
-            return { success: true, project: newProject };
-        } catch (error) {
-            console.error('Ошибка добавления проекта:', error);
-            return { success: false, error: 'Ошибка добавления проекта' };
-        }
-    }
-
-    // Удаление проекта
-    async deleteProject(projectId) {
-        try {
-            this.cache.projects = this.cache.projects.filter(p => p.id !== projectId);
-            await this.saveData();
-            return { success: true };
-        } catch (error) {
-            console.error('Ошибка удаления проекта:', error);
-            return { success: false, error: 'Ошибка удаления проекта' };
-        }
-    }
-
     // Получение всех пользователей
     async getAllUsers() {
         try {
-            return this.cache.users.map(user => ({
+            return this.data.users.map(user => ({
                 id: user.id,
                 email: user.email,
                 name: user.name,
@@ -313,21 +258,21 @@ class UniversalDatabase {
     // Изменение роли пользователя
     async changeUserRole(userId, newRole) {
         try {
-            const user = this.cache.users.find(u => u.id === userId);
+            const user = this.data.users.find(u => u.id === userId);
             if (!user) {
                 return { success: false, error: 'Пользователь не найден' };
             }
 
             // Нельзя изменить роль последнего администратора
             if (user.role === 'admin' && newRole !== 'admin') {
-                const adminCount = this.cache.users.filter(u => u.role === 'admin' && u.isActive).length;
+                const adminCount = this.data.users.filter(u => u.role === 'admin' && u.isActive).length;
                 if (adminCount <= 1) {
                     return { success: false, error: 'Нельзя удалить последнего администратора' };
                 }
             }
 
             user.role = newRole;
-            await this.saveData();
+            await this.saveToFile();
             return { success: true };
         } catch (error) {
             console.error('Ошибка изменения роли:', error);
@@ -338,25 +283,65 @@ class UniversalDatabase {
     // Блокировка/разблокировка пользователя
     async toggleUserStatus(userId) {
         try {
-            const user = this.cache.users.find(u => u.id === userId);
+            const user = this.data.users.find(u => u.id === userId);
             if (!user) {
                 return { success: false, error: 'Пользователь не найден' };
             }
 
             // Нельзя заблокировать последнего администратора
             if (user.role === 'admin' && user.isActive) {
-                const adminCount = this.cache.users.filter(u => u.role === 'admin' && u.isActive).length;
+                const adminCount = this.data.users.filter(u => u.role === 'admin' && u.isActive).length;
                 if (adminCount <= 1) {
                     return { success: false, error: 'Нельзя заблокировать последнего администратора' };
                 }
             }
 
             user.isActive = !user.isActive;
-            await this.saveData();
+            await this.saveToFile();
             return { success: true };
         } catch (error) {
             console.error('Ошибка изменения статуса:', error);
             return { success: false, error: 'Ошибка изменения статуса' };
+        }
+    }
+
+    // Получение проектов
+    async getProjects() {
+        try {
+            return this.data.projects || [];
+        } catch (error) {
+            console.error('Ошибка получения проектов:', error);
+            return [];
+        }
+    }
+
+    // Добавление проекта
+    async addProject(projectData) {
+        try {
+            const newProject = {
+                id: Date.now(),
+                ...projectData,
+                createdAt: new Date().toISOString()
+            };
+
+            this.data.projects.push(newProject);
+            await this.saveToFile();
+            return { success: true, project: newProject };
+        } catch (error) {
+            console.error('Ошибка добавления проекта:', error);
+            return { success: false, error: 'Ошибка добавления проекта' };
+        }
+    }
+
+    // Удаление проекта
+    async deleteProject(projectId) {
+        try {
+            this.data.projects = this.data.projects.filter(p => p.id !== projectId);
+            await this.saveToFile();
+            return { success: true };
+        } catch (error) {
+            console.error('Ошибка удаления проекта:', error);
+            return { success: false, error: 'Ошибка удаления проекта' };
         }
     }
 
@@ -370,8 +355,8 @@ class UniversalDatabase {
                 read: false
             };
 
-            this.cache.messages.push(newMessage);
-            await this.saveData();
+            this.data.messages.push(newMessage);
+            await this.saveToFile();
             return { success: true, message: newMessage };
         } catch (error) {
             console.error('Ошибка добавления сообщения:', error);
@@ -382,7 +367,7 @@ class UniversalDatabase {
     // Получение сообщений
     async getMessages() {
         try {
-            return this.cache.messages || [];
+            return this.data.messages || [];
         } catch (error) {
             console.error('Ошибка получения сообщений:', error);
             return [];
@@ -393,9 +378,9 @@ class UniversalDatabase {
     async getStats() {
         try {
             return {
-                projects: this.cache.projects.length,
-                users: this.cache.users.filter(u => u.isActive).length,
-                messages: this.cache.messages.filter(m => !m.read).length
+                projects: this.data.projects.length,
+                users: this.data.users.filter(u => u.isActive).length,
+                messages: this.data.messages.filter(m => !m.read).length
             };
         } catch (error) {
             console.error('Ошибка получения статистики:', error);
@@ -422,7 +407,7 @@ class UniversalDatabase {
     // Экспорт данных
     exportData() {
         try {
-            return this.cache;
+            return this.data;
         } catch (error) {
             console.error('Ошибка экспорта данных:', error);
             return null;
@@ -432,8 +417,8 @@ class UniversalDatabase {
     // Импорт данных
     async importData(importData) {
         try {
-            this.cache = importData;
-            await this.saveData();
+            this.data = importData;
+            await this.saveToFile();
             return { success: true };
         } catch (error) {
             console.error('Ошибка импорта данных:', error);
@@ -442,7 +427,7 @@ class UniversalDatabase {
     }
 }
 
-// Глобальный экземпляр универсальной базы данных
-window.db = new UniversalDatabase();
+// Глобальный экземпляр базы данных
+window.db = new FileDatabase();
 
-console.log('Универсальная база данных для 404 | NotFound Studio инициализирована');
+console.log('Файловая база данных data.db для 404 | NotFound Studio инициализирована');
