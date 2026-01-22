@@ -92,8 +92,8 @@ class LoginPage {
 
         try {
             // Проверяем существование пользователя
-            const data = window.db.loadData();
-            const user = data.users.find(u => u.email === email);
+            const users = await window.db.getAllUsers();
+            const user = users.find(u => u.email === email);
 
             if (user) {
                 // В реальном приложении здесь была бы отправка email
